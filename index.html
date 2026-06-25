@@ -68,16 +68,22 @@
   #zonewrap.disabled { opacity: .35; }
 
   /* キッカーのミート・タイミングゲージ */
-  #meter { position: fixed; left: 50%; transform: translateX(-50%); bottom: 22%;
-           width: min(78vw, 400px); height: 26px; border-radius: 999px; background: rgba(0,0,0,.45);
-           border: 2px solid rgba(255,255,255,.25); display: none; overflow: hidden; }
+  #meter { position: fixed; left: 50%; top: 50%; transform: translate(-50%,-50%);
+           width: min(86vw, 460px); height: 46px; border-radius: 12px; background: rgba(0,0,0,.55);
+           border: 2px solid rgba(255,255,255,.3); display: none; overflow: hidden; z-index: 6;
+           box-shadow: 0 10px 40px rgba(0,0,0,.5); pointer-events: none; }
   #meterBand { position: absolute; top: 0; bottom: 0; left: 41%; width: 18%;
-               background: linear-gradient(90deg, rgba(76,222,128,.25), rgba(76,222,128,.6), rgba(76,222,128,.25)); }
-  #meterMark { position: absolute; top: -3px; bottom: -3px; width: 6px; left: 0; border-radius: 3px;
-               background: #fff; box-shadow: 0 0 10px #fff; }
-  #meterHit { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
-              font-size: clamp(40px,14vw,72px); font-weight: 900; color: rgba(255,255,255,.10);
-              z-index: 5; cursor: pointer; user-select: none; letter-spacing: 4px; }
+               background: repeating-linear-gradient(45deg, rgba(76,222,128,.85), rgba(76,222,128,.85) 8px, rgba(56,190,108,.85) 8px, rgba(56,190,108,.85) 16px);
+               border-left: 2px solid #eaffea; border-right: 2px solid #eaffea; }
+  #meterBand::after { content: 'JUST'; position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+               font-size: 13px; font-weight: 900; color: #06320f; letter-spacing: 2px; }
+  #meterMark { position: absolute; top: -4px; bottom: -4px; width: 8px; left: 0; border-radius: 4px;
+               background: #fff200; box-shadow: 0 0 14px #fff200, 0 0 4px #fff; }
+  #meterLabel { position: fixed; left: 50%; top: calc(50% - 56px); transform: translateX(-50%);
+                font-size: 18px; font-weight: 800; text-shadow: 0 2px 8px rgba(0,0,0,.8); display: none; z-index: 6; white-space: nowrap; pointer-events: none; }
+  #meterHit { position: fixed; inset: 0; display: flex; align-items: flex-end; justify-content: center; padding-bottom: 22%;
+              font-size: 16px; font-weight: 700; color: rgba(255,255,255,.5);
+              z-index: 5; cursor: pointer; user-select: none; letter-spacing: 2px; }
 </style>
 </head>
 <body>
@@ -101,8 +107,9 @@
 <div id="timerbar"><div id="timerfill"></div></div>
 
 <!-- キッカーのミート・タイミングゲージ -->
+<div id="meterLabel">⚽ JUSTゾーンでタップ！</div>
 <div id="meter"><div id="meterBand"></div><div id="meterMark"></div></div>
-<div id="meterHit" class="hidden">TAP!</div>
+<div id="meterHit" class="hidden">画面のどこでもタップ</div>
 
 <!-- Start menu -->
 <div id="menu" class="panel">
@@ -153,11 +160,12 @@ const CORNERS = [0, 2, 6, 8];
 
 // ---- 難易度設定 ----
 //  flyKeeper = 守備時の反応猶予（ボール到達までの秒数。短いほど難しい）
+//  setPause  = 蹴ってからボールが飛び出すまでの構えの間（秒）
 //  meterSpeed/bandHalf = 攻撃時ミートゲージの速さ/的の広さ(%)
 const DIFFS = {
-  EASY:   { read:0.30, cpuAdj:0.12, flyKeeper:0.85, flyKick:0.60, cornerBias:0.30, feint:0.00, playerAdj:0.45, aimTime:4.0, meterSpeed:0.85, bandHalf:13 },
-  NORMAL: { read:0.46, cpuAdj:0.30, flyKeeper:0.62, flyKick:0.55, cornerBias:0.55, feint:0.18, playerAdj:0.34, aimTime:3.5, meterSpeed:1.25, bandHalf:9 },
-  HARD:   { read:0.62, cpuAdj:0.46, flyKeeper:0.46, flyKick:0.50, cornerBias:0.78, feint:0.32, playerAdj:0.22, aimTime:3.0, meterSpeed:1.75, bandHalf:6 },
+  EASY:   { read:0.30, cpuAdj:0.12, flyKeeper:1.25, setPause:0.28, flyKick:0.60, cornerBias:0.30, feint:0.00, playerAdj:0.45, aimTime:4.0, meterSpeed:0.70, bandHalf:16 },
+  NORMAL: { read:0.46, cpuAdj:0.30, flyKeeper:1.00, setPause:0.22, flyKick:0.55, cornerBias:0.55, feint:0.18, playerAdj:0.34, aimTime:3.5, meterSpeed:1.00, bandHalf:11 },
+  HARD:   { read:0.62, cpuAdj:0.46, flyKeeper:0.78, setPause:0.16, flyKick:0.50, cornerBias:0.78, feint:0.32, playerAdj:0.22, aimTime:3.0, meterSpeed:1.40, bandHalf:8 },
 };
 let diffKey = 'NORMAL';
 let diff = DIFFS[diffKey];
@@ -522,6 +530,7 @@ const meterEl = document.getElementById('meter');
 const meterBand = document.getElementById('meterBand');
 const meterMark = document.getElementById('meterMark');
 const meterHit = document.getElementById('meterHit');
+const meterLabel = document.getElementById('meterLabel');
 
 let zoneButtons = [];
 function buildZoneButtons(){
@@ -627,10 +636,10 @@ function kickerPhase(){
   }, 50);
 }
 
-// ② ミート・タイミングゲージ。中央のバンドでタップできれば good/perfect
+// ② ミート・タイミングゲージ。中央のJUSTゾーンでタップできれば good/perfect
 function startTimingMeter(zone){
-  showMessage('ジャストでミート！', 'バーが中央に来たらタップ', 0);
   meterEl.style.display = 'block';
+  meterLabel.style.display = 'block';
   meterBand.style.left = (50 - diff.bandHalf) + '%';
   meterBand.style.width = (diff.bandHalf * 2) + '%';
   meterHit.classList.remove('hidden');
@@ -643,7 +652,7 @@ function startTimingMeter(zone){
     // 0..100 を往復（三角波）
     const phase = (t * diff.meterSpeed) % 1;
     const pos = (phase < 0.5 ? phase*2 : (1-phase)*2) * 100;
-    meterMark.style.left = 'calc(' + pos + '% - 3px)';
+    meterMark.style.left = 'calc(' + pos + '% - 4px)';
     meterMark.dataset.pos = pos;
     if(!done){ raf = requestAnimationFrame(frame); }
   }
@@ -652,17 +661,20 @@ function startTimingMeter(zone){
   function hit(){
     if(done) return; done = true;
     cancelAnimationFrame(raf);
+    clearTimeout(auto);
+    meterHit.removeEventListener('click', hit);
     meterHit.classList.add('hidden');
     meterEl.style.display = 'none';
-    hideMessage();
+    meterLabel.style.display = 'none';
     const pos = parseFloat(meterMark.dataset.pos || '0');
     const d = Math.abs(pos - 50);
     let quality;
     if(d <= diff.bandHalf) quality = 'PERFECT';
     else if(d <= diff.bandHalf * 2.4) quality = 'GOOD';
     else quality = 'MISS';
-    meterHit.removeEventListener('click', hit);
-    clearTimeout(auto);
+    // 判定をフィードバック表示してから蹴る
+    const label = quality === 'PERFECT' ? 'PERFECT!' : quality === 'GOOD' ? 'GOOD' : 'MISS…';
+    showMessage(label, '', 700);
     doKickerShot(zone, quality);
   }
   meterHit.addEventListener('click', hit);
@@ -740,30 +752,33 @@ function keeperPhase(){
   }
   zoneButtons.forEach(b=> b.addEventListener('click', onDive));
 
-  // 相手キッカーが助走 → 蹴った瞬間に反応解禁 → ボール到達までに反応してタップ
+  // 相手キッカーが助走 → 蹴った瞬間に反応解禁 → 構えの間 → ボールが飛ぶ
   runUp(kicker, {x:0.9 + shownSide*0.9, y:0, z:12.6}, {x:0.45, y:0, z:11.4}, 0.85, ()=>{
     sndKick(); shake = 0.25;
     canReact = true;
     zoneWrap.classList.remove('disabled');
-    showMessage('反応！', '', 500);
+    showMessage('反応！', '飛ぶコースにタップ', 600);
     const target = zonePos(targetZone);
-    flyBall({x:target.x, y:target.y, z:0.3}, diff.flyKeeper, ()=>{
-      resolved = true; cleanupZones();
-      const saved = (playerDive === targetZone) ||
-                    (playerDive >= 0 && isAdjacent(playerDive, targetZone) && rand() < diff.playerAdj);
-      if(saved){ sndCheer(); shake = 0.4; resolveShot(false, 'SAVE!!', 'ナイス反応！', true); }
-      else { sndNet(); resolveShot(true, 'GOAL...', playerDive<0?'反応が間に合わず…':'コースを外した…', true); }
-    });
+    // 蹴ってから少し間を置いてボールを発射（反応の余裕）
+    setTimeout(()=>{
+      flyBall({x:target.x, y:target.y, z:0.3}, diff.flyKeeper, ()=>{
+        resolved = true; cleanupZones();
+        const saved = (playerDive === targetZone) ||
+                      (playerDive >= 0 && isAdjacent(playerDive, targetZone) && rand() < diff.playerAdj);
+        if(saved){ sndCheer(); shake = 0.4; resolveShot(false, 'SAVE!!', 'ナイス反応！', true); }
+        else { sndNet(); resolveShot(true, 'GOAL...', playerDive<0?'反応が間に合わず…':'コースを外した…', true); }
+      }, 'linear');
+    }, diff.setPause * 1000);
   });
 }
 
-// ボールを目標へ飛ばす
-function flyBall(target, duration, done){
+// ボールを目標へ飛ばす。easeMode 'linear' は等速寄り（守備で読み取りやすい）
+function flyBall(target, duration, done, easeMode){
   const start = { x: ball.position.x, y: ball.position.y, z: ball.position.z };
   const t0 = performance.now();
   function step(){
     const k = Math.min(1, (performance.now()-t0)/(duration*1000));
-    const e = 1 - Math.pow(1-k, 2);
+    const e = easeMode === 'linear' ? k : 1 - Math.pow(1-k, 2);
     ball.position.x = start.x + (target.x-start.x)*e;
     ball.position.y = start.y + (target.y-start.y)*e + Math.sin(e*Math.PI)*0.3;
     ball.position.z = start.z + (target.z-start.z)*e;
