@@ -309,9 +309,15 @@ function buildHumanoid(col){
   const g = new THREE.Group();
   const M = (c)=> new THREE.MeshStandardMaterial({ color: c, roughness: 0.7 });
   const part = (geo, mat, x, y, z) => { const m = new THREE.Mesh(geo, mat); m.position.set(x,y,z); m.castShadow = true; g.add(m); return m; };
-  // 脚
-  part(new THREE.BoxGeometry(0.18,0.75,0.2), M(col.sock), -0.13, 0.38, 0);
-  part(new THREE.BoxGeometry(0.18,0.75,0.2), M(col.sock),  0.13, 0.38, 0);
+  // 脚（股関節でピボットさせ、助走・キックで振れるようにグループ化）
+  function legGroup(x){
+    const grp = new THREE.Group();
+    grp.position.set(x, 0.78, 0);                    // 股関節の高さ
+    const m = new THREE.Mesh(new THREE.BoxGeometry(0.18,0.75,0.2), M(col.sock));
+    m.position.y = -0.4; m.castShadow = true;        // 脚は股関節からぶら下がる
+    grp.add(m); g.add(grp); return grp;
+  }
+  const legL = legGroup(-0.13), legR = legGroup(0.13);
   // 胴
   part(new THREE.BoxGeometry(0.52,0.72,0.3), M(col.shirt), 0, 1.05, 0);
   // 頭
@@ -325,7 +331,43 @@ function buildHumanoid(col){
     part(new THREE.BoxGeometry(0.2,0.2,0.2), M(col.glove),  0.37, 0.74, 0);
   }
   g.userData.armL = armL; g.userData.armR = armR;
+  g.userData.legL = legL; g.userData.legR = legR;
   return g;
+}
+
+// 全メッシュのポーズ（腕・脚の回転）をリセット
+function resetPose(player){
+  ['armL','armR','legL','legR'].forEach(k=>{ const p = player.userData[k]; if(p) p.rotation.set(0,0,0); });
+}
+// 半透明・不透明の切り替え
+function setOpacity(player, op){
+  player.traverse(o=>{ if(o.isMesh){ o.material.transparent = op < 1; o.material.opacity = op; o.material.depthWrite = op >= 1; } });
+}
+// 助走 → キックのモーション。接地（キック）時に onContact() を呼ぶ
+function runUp(player, from, plant, duration, onContact){
+  player.position.set(from.x, from.y, from.z);
+  const legL = player.userData.legL, legR = player.userData.legR;
+  const t0 = performance.now();
+  let fired = false;
+  function step(){
+    const t = (performance.now()-t0)/1000;
+    const k = Math.min(1, t/duration);
+    const e = k*k;                                   // ease-in（だんだん加速）
+    player.position.x = from.x + (plant.x-from.x)*e;
+    player.position.z = from.z + (plant.z-from.z)*e;
+    const jog = Math.sin(t*22) * 0.6 * (1 - k*0.3);  // 脚を交互に振る
+    if(legL) legL.rotation.x = jog;
+    if(legR) legR.rotation.x = -jog;
+    if(k < 1){ requestAnimationFrame(step); }
+    else if(!fired){
+      fired = true;
+      if(legR) legR.rotation.x = -1.3;               // 蹴り足を振り抜く
+      if(legL) legL.rotation.x = 0.3;
+      if(onContact) onContact();
+      setTimeout(()=>{ if(legR) legR.rotation.x = 0; if(legL) legL.rotation.x = 0; }, 350);
+    }
+  }
+  step();
 }
 
 function buildStadium(){
@@ -368,14 +410,16 @@ function buildFloodlights(){
 }
 
 function setCameraKicker(){
-  camBase.set(0, 1.75, SPOT_Z + 3.2);
+  // ボール後方やや上空。助走する自分とゴールの両方が見える
+  camBase.set(0, 2.0, SPOT_Z + 4.5);
   camera.position.copy(camBase);
-  camera.lookAt(0, 1.3, 0);
+  camera.lookAt(0, 1.2, 1);
 }
 function setCameraKeeper(){
-  camBase.set(0, 1.6, -0.6);
+  // ゴール裏やや上から。キーパー全体を手前に映し、奥のキッカーも見える
+  camBase.set(0, 2.3, -2.7);
   camera.position.copy(camBase);
-  camera.lookAt(0, 1.2, SPOT_Z);
+  camera.lookAt(0, 1.1, 9);
 }
 
 function onResize(){
@@ -508,18 +552,25 @@ function nextRound(){
   if(round >= MAX_ROUNDS * 2){ endGame(); return; }
   resetBall();
   poseKeeper(0, true);
-  kicker.visible = false;
+  resetPose(kicker); resetPose(keeper);
+  keeper.visible = true; kicker.visible = true;
   const kickerTurn = youAreKicker();
   roleEl.textContent = kickerTurn ? 'KICKER' : 'KEEPER';
   roleEl.className = kickerTurn ? 'role-kicker' : 'role-keeper';
 
   const shotNo = Math.floor(round/2) + 1;
   if(kickerTurn){
-    setCameraKicker(); keeper.visible = true;
+    // 攻撃: 自分（キッカー）を映す。キーパーは奥で不透明
+    setCameraKicker();
+    setOpacity(keeper, 1);
+    kicker.position.set(-1.8, 0, 13.9);   // 助走開始位置（カメラ手前）
     showMessage(`第${shotNo}本 / 攻撃`, 'コースをタップして狙え！', 1400);
     sndWhistle(); setTimeout(kickerPhase, 1500);
   } else {
-    setCameraKeeper(); keeper.visible = true; kicker.visible = true;
+    // 守備: キーパー全体を手前に映し半透明化、奥の相手キッカーが透けて見える
+    setCameraKeeper();
+    setOpacity(keeper, 0.45);
+    kicker.position.set(0.9, 0, 12.6);
     showMessage(`第${shotNo}本 / 守備`, 'ボールが来るコースを読め！', 1400);
     sndWhistle(); setTimeout(keeperPhase, 1500);
   }
@@ -561,9 +612,7 @@ function cpuKeeperGuess(playerZone){
 }
 
 function doKickerShot(zone, timedOut){
-  sndKick(); shake = 0.3;
   const guess = cpuKeeperGuess(zone);
-  poseKeeper(guess);
   lastPlayerKickZone = zone;
 
   const target = zonePos(zone);
@@ -572,11 +621,16 @@ function doKickerShot(zone, timedOut){
   const tx = offTarget ? target.x * 1.35 : target.x;
   const ty = offTarget ? target.y + 0.7 : target.y;
 
-  flyBall({x:tx, y:ty, z:0}, diff.flyKick, ()=>{
-    if(offTarget){ resolveShot(false, '枠外！', 'ねらい過ぎた…'); return; }
-    const saved = (guess === zone) || (isAdjacent(guess, zone) && rand() < diff.cpuAdj);
-    if(saved){ sndNet(); resolveShot(false, 'SAVED!', 'キーパーに止められた！'); }
-    else { sndNet(); sndCheer(); resolveShot(true, 'GOAL!!', 'ナイスシュート！'); }
+  // 助走 → ボールの横でキック → ボール発射
+  runUp(kicker, {x:-1.8, y:0, z:13.9}, {x:-0.5, y:0, z:11.4}, 0.75, ()=>{
+    sndKick(); shake = 0.3;
+    poseKeeper(guess);   // キーパーは蹴られた瞬間に反応してダイブ
+    flyBall({x:tx, y:ty, z:0}, diff.flyKick, ()=>{
+      if(offTarget){ resolveShot(false, '枠外！', 'ねらい過ぎた…'); return; }
+      const saved = (guess === zone) || (isAdjacent(guess, zone) && rand() < diff.cpuAdj);
+      if(saved){ sndNet(); resolveShot(false, 'SAVED!', 'キーパーに止められた！'); }
+      else { sndNet(); sndCheer(); resolveShot(true, 'GOAL!!', 'ナイスシュート！'); }
+    });
   });
 }
 
@@ -590,11 +644,10 @@ function keeperPhase(){
   if(rand() < diff.cornerBias){ targetZone = CORNERS[Math.floor(rand()*CORNERS.length)]; }
   else { targetZone = Math.floor(rand()*9); }
 
-  // 助走方向のヒント。フェイント時は逆を向く
+  // 助走方向のヒント。フェイント時は逆から入る
   const realSide = Math.sign(zonePos(targetZone).x);
   const feint = rand() < diff.feint;
-  const shownSide = feint ? -realSide : realSide;
-  kicker.position.x = 0.9 + shownSide*0.4;
+  const shownSide = feint ? -realSide : (realSide || 1);
 
   let playerDive = -1, resolved = false;
   function onDive(e){
@@ -607,9 +660,9 @@ function keeperPhase(){
   }
   zoneButtons.forEach(b=> b.addEventListener('click', onDive));
 
-  const delay = 650 + rand()*450;
-  setTimeout(()=>{
-    sndKick(); shake = 0.25; kicker.visible = false;
+  // 相手キッカーが助走 → こちら（キーパー）に向けてシュート
+  runUp(kicker, {x:0.9 + shownSide*0.9, y:0, z:12.6}, {x:0.45, y:0, z:11.4}, 0.85, ()=>{
+    sndKick(); shake = 0.25;
     const target = zonePos(targetZone);
     flyBall({x:target.x, y:target.y, z:0.3}, diff.flyKeeper, ()=>{
       resolved = true; cleanupZones();
@@ -618,7 +671,7 @@ function keeperPhase(){
       if(saved){ sndCheer(); shake = 0.4; resolveShot(false, 'SAVE!!', 'ビッグセーブ！', true); }
       else { sndNet(); resolveShot(true, 'GOAL...', playerDive<0?'反応できず…':'コースを読まれた…', true); }
     });
-  }, delay);
+  });
 }
 
 // ボールを目標へ飛ばす
