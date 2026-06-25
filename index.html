@@ -6,64 +6,78 @@
 <title>PK BATTLE - サッカーPKゲーム</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-  html, body { width: 100%; height: 100%; overflow: hidden; background: #0b1020; font-family: -apple-system, "Segoe UI", "Hiragino Kaku Gothic ProN", "Noto Sans JP", sans-serif; color: #fff; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #05080f; font-family: -apple-system, "Segoe UI", "Hiragino Kaku Gothic ProN", "Noto Sans JP", sans-serif; color: #fff; }
   #game { position: fixed; inset: 0; }
   canvas { display: block; width: 100%; height: 100%; }
 
+  /* 画面端の軽いビネット（没入感） */
+  #vignette { position: fixed; inset: 0; pointer-events: none; box-shadow: inset 0 0 220px 40px rgba(0,0,0,.55); }
+
   /* HUD */
-  #hud { position: fixed; top: 0; left: 0; right: 0; display: flex; justify-content: space-between; align-items: center;
-         padding: 12px 16px; font-size: 14px; pointer-events: none; text-shadow: 0 1px 3px rgba(0,0,0,.6); }
-  #score { font-size: 20px; font-weight: 700; letter-spacing: 1px; }
-  #role { padding: 4px 12px; border-radius: 999px; font-weight: 700; font-size: 13px; }
-  .role-kicker { background: #ff5252; }
-  .role-keeper { background: #2979ff; }
-  #marks { display: flex; gap: 4px; margin-top: 4px; font-size: 16px; }
+  #hud { position: fixed; top: 0; left: 0; right: 0; display: flex; justify-content: space-between; align-items: flex-start;
+         padding: 12px 16px; font-size: 14px; pointer-events: none; text-shadow: 0 1px 3px rgba(0,0,0,.7); }
+  #score { font-size: 20px; font-weight: 800; letter-spacing: 1px; }
+  #marks { display: flex; gap: 4px; margin-top: 4px; font-size: 15px; min-height: 18px; }
+  #rightHud { text-align: right; }
+  #role { display: inline-block; padding: 4px 12px; border-radius: 999px; font-weight: 800; font-size: 13px; }
+  .role-kicker { background: linear-gradient(90deg,#ff5252,#ff8a65); }
+  .role-keeper { background: linear-gradient(90deg,#2979ff,#40c4ff); }
+  #diffTag { margin-top: 6px; font-size: 11px; opacity: .8; letter-spacing: 1px; }
 
   /* center message */
-  #message { position: fixed; top: 18%; left: 0; right: 0; text-align: center; pointer-events: none;
-             font-size: 22px; font-weight: 700; text-shadow: 0 2px 8px rgba(0,0,0,.7); transition: opacity .2s; }
-  #message .big { font-size: 40px; display: block; margin-bottom: 6px; }
-  #message .sub { font-size: 16px; font-weight: 400; opacity: .85; }
+  #message { position: fixed; top: 16%; left: 0; right: 0; text-align: center; pointer-events: none;
+             font-weight: 800; text-shadow: 0 2px 10px rgba(0,0,0,.8); transition: opacity .2s; }
+  #message .big { font-size: clamp(34px,11vw,52px); display: block; margin-bottom: 6px; }
+  #message .sub { font-size: 16px; font-weight: 500; opacity: .9; }
 
   /* zone grid (3x3 target zones) */
-  #zonewrap { position: fixed; left: 50%; top: 50%; transform: translate(-50%,-50%);
-              width: min(72vw, 360px); aspect-ratio: 16 / 9; display: none; }
+  #zonewrap { position: fixed; left: 50%; top: 48%; transform: translate(-50%,-50%);
+              width: min(74vw, 380px); aspect-ratio: 16 / 10; display: none; }
   #zonegrid { display: grid; grid-template-columns: repeat(3,1fr); grid-template-rows: repeat(3,1fr);
               width: 100%; height: 100%; gap: 6px; }
-  .zone { border: 2px solid rgba(255,255,255,.35); border-radius: 8px; background: rgba(255,255,255,.04);
-          cursor: pointer; transition: background .1s, transform .05s; }
-  .zone:active { transform: scale(.95); }
-  .zone.hot { background: rgba(255,255,255,.18); }
+  .zone { border: 2px solid rgba(255,255,255,.30); border-radius: 10px; background: rgba(255,255,255,.04);
+          cursor: pointer; transition: background .1s, transform .05s, border-color .1s; }
+  .zone:active { transform: scale(.94); }
+  .zone.hot { background: rgba(255,235,59,.22); border-color: rgba(255,235,59,.9); }
 
   /* timer bar */
-  #timerbar { position: fixed; left: 50%; transform: translateX(-50%); bottom: 16%;
-              width: min(72vw, 360px); height: 8px; border-radius: 999px; background: rgba(255,255,255,.15); display: none; overflow: hidden; }
+  #timerbar { position: fixed; left: 50%; transform: translateX(-50%); bottom: 15%;
+              width: min(74vw, 380px); height: 9px; border-radius: 999px; background: rgba(255,255,255,.15); display: none; overflow: hidden; }
   #timerfill { height: 100%; width: 100%; background: linear-gradient(90deg,#ffeb3b,#ff5252); transition: width .05s linear; }
 
-  /* buttons / panels */
+  /* panels */
   .panel { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
-           background: radial-gradient(120% 120% at 50% 30%, rgba(20,40,90,.55), rgba(5,8,20,.92)); text-align: center; padding: 24px; }
-  .panel h1 { font-size: clamp(34px, 9vw, 64px); letter-spacing: 2px; margin-bottom: 6px;
+           background: radial-gradient(120% 120% at 50% 25%, rgba(20,45,100,.5), rgba(4,7,16,.93)); text-align: center; padding: 24px; }
+  .panel h1 { font-size: clamp(36px, 10vw, 70px); letter-spacing: 3px; margin-bottom: 4px; font-weight: 900;
               background: linear-gradient(90deg,#4dd0e1,#fff,#ff8a80); -webkit-background-clip: text; background-clip: text; color: transparent; }
-  .panel p { opacity: .85; margin-bottom: 22px; line-height: 1.7; font-size: 15px; max-width: 420px; }
-  .btn { pointer-events: auto; cursor: pointer; border: none; border-radius: 999px; padding: 16px 40px;
-         font-size: 18px; font-weight: 700; color: #08111f; background: linear-gradient(90deg,#4dd0e1,#80d8ff);
-         box-shadow: 0 8px 24px rgba(0,180,255,.3); transition: transform .08s; }
+  .tagline { opacity: .7; letter-spacing: 4px; font-size: 12px; margin-bottom: 22px; }
+  .panel p { opacity: .9; margin-bottom: 18px; line-height: 1.7; font-size: 15px; max-width: 440px; }
+  .label { font-size: 12px; opacity: .7; letter-spacing: 2px; margin-bottom: 10px; }
+  .diffrow { display: flex; gap: 10px; margin-bottom: 22px; flex-wrap: wrap; justify-content: center; }
+  .diffbtn { pointer-events: auto; cursor: pointer; border: 2px solid rgba(255,255,255,.25); background: rgba(255,255,255,.06);
+             color: #fff; border-radius: 12px; padding: 10px 18px; font-size: 15px; font-weight: 700; transition: all .12s; }
+  .diffbtn.sel { border-color: #4dd0e1; background: rgba(77,208,225,.18); box-shadow: 0 0 16px rgba(77,208,225,.4); }
+  .btn { pointer-events: auto; cursor: pointer; border: none; border-radius: 999px; padding: 16px 44px;
+         font-size: 19px; font-weight: 800; color: #08111f; background: linear-gradient(90deg,#4dd0e1,#80d8ff);
+         box-shadow: 0 8px 28px rgba(0,180,255,.35); transition: transform .08s; }
   .btn:active { transform: scale(.96); }
   .hidden { display: none !important; }
-  #howto { margin-top: 18px; font-size: 13px; opacity: .7; line-height: 1.8; }
+  #howto { margin-top: 20px; font-size: 13px; opacity: .65; line-height: 1.9; }
 </style>
 </head>
 <body>
 <div id="game"></div>
+<div id="vignette"></div>
 
-<!-- HUD -->
 <div id="hud" class="hidden">
   <div>
     <div id="score">YOU 0 - 0 CPU</div>
     <div id="marks"></div>
   </div>
-  <div id="role" class="role-kicker">KICKER</div>
+  <div id="rightHud">
+    <div id="role" class="role-kicker">KICKER</div>
+    <div id="diffTag">NORMAL</div>
+  </div>
 </div>
 
 <div id="message" class="hidden"></div>
@@ -74,11 +88,18 @@
 <!-- Start menu -->
 <div id="menu" class="panel">
   <h1>PK BATTLE</h1>
-  <p>サッカーPK対決。<br>あなたは<b>キッカー（攻撃）</b>と<b>キーパー（守備）</b>を交互に担当。<br>全5本、より多く決めた方の勝ち！</p>
+  <div class="tagline">KICKER vs KEEPER</div>
+  <div class="label">難易度をえらぶ</div>
+  <div class="diffrow" id="diffRow">
+    <button class="diffbtn" data-d="EASY">かんたん</button>
+    <button class="diffbtn sel" data-d="NORMAL">ふつう</button>
+    <button class="diffbtn" data-d="HARD">むずかしい</button>
+  </div>
   <button class="btn" id="startBtn">▶ ゲーム開始</button>
   <div id="howto">
     ● キッカー: 狙うコースをタップ（時間内に！）<br>
-    ● キーパー: ボールが来る前に飛ぶコースをタップ
+    ● キーパー: ボールが来るコースを読んでタップ<br>
+    全5本・攻守交代。多く決めた方の勝ち
   </div>
 </div>
 
@@ -92,167 +113,268 @@
 <script src="https://unpkg.com/three@0.128.0/build/three.min.js"></script>
 <script>
 /* =========================================================================
-   PK BATTLE - 初心者向けプロトタイプ
-   - Three.js による簡易3DのPKゲーム
-   - キッカー視点／キーパー視点を交互にプレイする5本勝負
+   PK BATTLE - サッカーPKゲーム（プロトタイプ v2）
+   - Three.js による簡易3D。キッカー視点／キーパー視点を交互にプレイ
+   - 影・スタジアム照明・観客・ピッチライン等で臨場感を強化
+   - 難易度（かんたん/ふつう/むずかしい）で歯ごたえを調整
    ========================================================================= */
 
-// ---- 3D シーンの基本セットアップ ----
+// ---- ゴール寸法とゾーン定義（実寸に近いスケール）----
+const GOAL_W = 7.32, GOAL_H = 2.44;
+const SPOT_Z = 11;                 // ペナルティスポット
+const ZONE_X = [-2.5, 0, 2.5];     // 左/中央/右
+const ZONE_Y = [2.05, 1.2, 0.45];  // 上/中/下
+function zonePos(i){ return { x: ZONE_X[i % 3], y: ZONE_Y[Math.floor(i / 3)] }; }
+function zoneRC(i){ return { r: Math.floor(i/3), c: i%3 }; }
+function isAdjacent(a, b){
+  const A = zoneRC(a), B = zoneRC(b);
+  return (Math.abs(A.r-B.r) + Math.abs(A.c-B.c)) === 1;
+}
+const CORNERS = [0, 2, 6, 8];
+
+// ---- 難易度設定 ----
+const DIFFS = {
+  EASY:   { read:0.30, cpuAdj:0.12, flyKeeper:0.70, flyKick:0.60, cornerBias:0.30, feint:0.00, playerAdj:0.45, kickTime:3.5 },
+  NORMAL: { read:0.46, cpuAdj:0.30, flyKeeper:0.58, flyKick:0.55, cornerBias:0.55, feint:0.18, playerAdj:0.34, kickTime:3.0 },
+  HARD:   { read:0.62, cpuAdj:0.46, flyKeeper:0.46, flyKick:0.50, cornerBias:0.78, feint:0.32, playerAdj:0.22, kickTime:2.4 },
+};
+let diffKey = 'NORMAL';
+let diff = DIFFS[diffKey];
+
+// ---- Three.js 基本 ----
 const container = document.getElementById('game');
 let scene, camera, renderer;
 let ball, keeper, kicker, goalGroup;
-let shake = 0;                 // 画面シェイク量
-let slowmo = 1;                // スローモーション係数(1=通常)
+let shake = 0;
+let camBase = new THREE.Vector3();
+// キーパーのダイブを滑らかに見せるための目標姿勢
+let keeperTarget = { x:0, y:0, z:0.3, rotZ:0, arm:0 };
 
-// ゴールの寸法（ゲーム用にスケール）
-const GOAL_W = 7.32, GOAL_H = 2.44;
-const SPOT_Z = 11;             // ペナルティスポットのz位置
-
-// 9ゾーンの中心座標（左右×上中下）。index = row*3 + col
-//   row 0 = 上, 1 = 中, 2 = 下 / col 0 = 左, 1 = 中央, 2 = 右
-const ZONE_X = [-2.3, 0, 2.3];
-const ZONE_Y = [2.0, 1.2, 0.45];
-function zonePos(i){ return { x: ZONE_X[i % 3], y: ZONE_Y[Math.floor(i / 3)] }; }
+function rand(){ return Math.random(); }
 
 function initScene(){
   scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x0a1530);
-  scene.fog = new THREE.Fog(0x0a1530, 25, 60);
+  scene.background = makeSkyTexture();
+  scene.fog = new THREE.Fog(0x0a1730, 35, 95);
 
-  camera = new THREE.PerspectiveCamera(55, window.innerWidth/window.innerHeight, 0.1, 200);
+  camera = new THREE.PerspectiveCamera(55, window.innerWidth/window.innerHeight, 0.1, 300);
 
   renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   container.appendChild(renderer.domElement);
 
-  // ライト
-  scene.add(new THREE.AmbientLight(0x88aaff, 0.6));
-  const dir = new THREE.DirectionalLight(0xffffff, 0.9);
-  dir.position.set(5, 12, 8);
-  scene.add(dir);
-  // スタジアム照明っぽい点光源
-  const spot = new THREE.PointLight(0xffffee, 0.6, 60);
-  spot.position.set(0, 14, 6);
-  scene.add(spot);
+  // --- ライティング ---
+  scene.add(new THREE.HemisphereLight(0x8ab0ff, 0x2a3a20, 0.55));
+  const key = new THREE.DirectionalLight(0xffffff, 1.0);
+  key.position.set(8, 18, 14);
+  key.castShadow = true;
+  key.shadow.mapSize.set(1024, 1024);
+  key.shadow.camera.near = 1; key.shadow.camera.far = 60;
+  key.shadow.camera.left = -20; key.shadow.camera.right = 20;
+  key.shadow.camera.top = 25;  key.shadow.camera.bottom = -5;
+  scene.add(key);
 
-  // ピッチ（芝）
-  const pitch = new THREE.Mesh(
-    new THREE.PlaneGeometry(40, 60),
-    new THREE.MeshStandardMaterial({ color: 0x1f7a3a })
-  );
-  pitch.rotation.x = -Math.PI/2;
-  pitch.position.z = 5;
-  scene.add(pitch);
-  // 芝のストライプ
-  for(let i=0;i<8;i++){
-    const stripe = new THREE.Mesh(
-      new THREE.PlaneGeometry(40, 3),
-      new THREE.MeshStandardMaterial({ color: i%2 ? 0x238a44 : 0x1c6e36 })
-    );
-    stripe.rotation.x = -Math.PI/2;
-    stripe.position.set(0, 0.01, i*3 - 4);
-    scene.add(stripe);
-  }
-
+  buildPitch();
   buildGoal();
   buildBall();
-  buildKeeper();
-  buildKicker();
-  buildCrowd();
+  keeper = buildHumanoid({ shirt:0x1b1f27, shorts:0x111419, sock:0x222831, skin:0xe7b48a, glove:0x39e0c8 });
+  keeper.position.set(0, 0, 0.3);
+  scene.add(keeper);
+  kicker = buildHumanoid({ shirt:0xc62828, shorts:0xffffff, sock:0xc62828, skin:0xe7b48a, glove:null });
+  kicker.position.set(0.9, 0, SPOT_Z + 0.6);
+  kicker.visible = false;
+  scene.add(kicker);
+
+  buildStadium();
+  buildFloodlights();
 
   window.addEventListener('resize', onResize);
   animate();
 }
 
+// 夜のスタジアム空（縦グラデーション）
+function makeSkyTexture(){
+  const c = document.createElement('canvas'); c.width = 2; c.height = 256;
+  const g = c.getContext('2d').createLinearGradient(0,0,0,256);
+  g.addColorStop(0, '#040814');
+  g.addColorStop(0.55, '#0c1830');
+  g.addColorStop(1, '#1d3358');
+  const ctx = c.getContext('2d'); ctx.fillStyle = g; ctx.fillRect(0,0,2,256);
+  const t = new THREE.CanvasTexture(c);
+  return t;
+}
+
+function buildPitch(){
+  // 芝（ストライプをテクスチャで表現）
+  const c = document.createElement('canvas'); c.width = 512; c.height = 512;
+  const ctx = c.getContext('2d');
+  for(let i=0;i<16;i++){ ctx.fillStyle = i%2 ? '#2a8f49' : '#23823f'; ctx.fillRect(0, i*32, 512, 32); }
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping; tex.repeat.set(3,3);
+  const pitch = new THREE.Mesh(
+    new THREE.PlaneGeometry(70, 90),
+    new THREE.MeshStandardMaterial({ map: tex, roughness: 1 })
+  );
+  pitch.rotation.x = -Math.PI/2;
+  pitch.position.z = 12;
+  pitch.receiveShadow = true;
+  scene.add(pitch);
+
+  // 白線（ペナルティエリア・ゴールエリア・スポット・アーク）
+  const lineMat = new THREE.LineBasicMaterial({ color: 0xffffff });
+  const y = 0.02;
+  const addLine = (pts) => {
+    const g = new THREE.BufferGeometry().setFromPoints(pts.map(p=>new THREE.Vector3(p[0], y, p[1])));
+    scene.add(new THREE.Line(g, lineMat));
+  };
+  // ゴールライン
+  addLine([[-25,0],[25,0]]);
+  // ペナルティエリア（深さ16.5 / 幅±20.16）
+  addLine([[-20.16,0],[-20.16,16.5],[20.16,16.5],[20.16,0]]);
+  // ゴールエリア（深さ5.5 / 幅±9.16）
+  addLine([[-9.16,0],[-9.16,5.5],[9.16,5.5],[9.16,0]]);
+  // ペナルティアーク（スポット中心・半径9.15のうちエリア外の弧）
+  const arcPts = [];
+  for(let a=-60; a<=60; a+=6){
+    const rad = (a-90) * Math.PI/180;
+    arcPts.push([Math.cos(rad)*9.15, SPOT_Z + Math.sin(rad)*9.15]);
+  }
+  // エリア線(z=16.5)より外側だけ描く
+  addLine(arcPts.filter(p=>p[1]>=16.5));
+  // ペナルティスポット
+  const spot = new THREE.Mesh(new THREE.CircleGeometry(0.2, 16), new THREE.MeshBasicMaterial({ color:0xffffff }));
+  spot.rotation.x = -Math.PI/2; spot.position.set(0, 0.02, SPOT_Z); scene.add(spot);
+}
+
 function buildGoal(){
   goalGroup = new THREE.Group();
-  const mat = new THREE.MeshStandardMaterial({ color: 0xffffff });
-  const postR = 0.08;
+  const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.5 });
+  const postR = 0.06;   // 実寸: ゴールポスト径は最大12cm = 半径0.06m
   const post = (x) => {
     const m = new THREE.Mesh(new THREE.CylinderGeometry(postR, postR, GOAL_H, 12), mat);
-    m.position.set(x, GOAL_H/2, 0); return m;
+    m.position.set(x, GOAL_H/2, 0); m.castShadow = true; return m;
   };
   goalGroup.add(post(-GOAL_W/2), post(GOAL_W/2));
-  const bar = new THREE.Mesh(new THREE.CylinderGeometry(postR, postR, GOAL_W, 12), mat);
-  bar.rotation.z = Math.PI/2; bar.position.set(0, GOAL_H, 0);
+  const bar = new THREE.Mesh(new THREE.CylinderGeometry(postR, postR, GOAL_W + postR*2, 12), mat);
+  bar.rotation.z = Math.PI/2; bar.position.set(0, GOAL_H, 0); bar.castShadow = true;
   goalGroup.add(bar);
-  // ネット（半透明の面）
-  const netMat = new THREE.MeshStandardMaterial({ color: 0xffffff, transparent: true, opacity: 0.12, side: THREE.DoubleSide });
-  const back = new THREE.Mesh(new THREE.PlaneGeometry(GOAL_W, GOAL_H), netMat);
-  back.position.set(0, GOAL_H/2, -1.4); goalGroup.add(back);
-  const top = new THREE.Mesh(new THREE.PlaneGeometry(GOAL_W, 1.4), netMat);
-  top.rotation.x = -Math.PI/2; top.position.set(0, GOAL_H, -0.7); goalGroup.add(top);
+
+  // ネット（格子線で表現）
+  const depth = 1.6;
+  const netMat = new THREE.LineBasicMaterial({ color: 0xdfe7ff, transparent: true, opacity: 0.35 });
+  const segs = [];
+  const W = GOAL_W/2;
+  // 背面の格子
+  for(let x=-W; x<=W; x+=0.42){ segs.push(x,0,-depth, x,GOAL_H,-depth); }
+  for(let yy=0; yy<=GOAL_H; yy+=0.4){ segs.push(-W,yy,-depth, W,yy,-depth); }
+  // 上面
+  for(let x=-W; x<=W; x+=0.42){ segs.push(x,GOAL_H,0, x,GOAL_H,-depth); }
+  // 側面
+  for(let z=0; z>=-depth; z-=0.4){ segs.push(-W,0,z,-W,GOAL_H,z); segs.push(W,0,z,W,GOAL_H,z); }
+  const ng = new THREE.BufferGeometry();
+  ng.setAttribute('position', new THREE.Float32BufferAttribute(segs, 3));
+  goalGroup.add(new THREE.LineSegments(ng, netMat));
   scene.add(goalGroup);
 }
 
 function buildBall(){
+  // サッカーボール風テクスチャ（白地に黒のパッチ）
+  const c = document.createElement('canvas'); c.width = 256; c.height = 128;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#f4f4f4'; ctx.fillRect(0,0,256,128);
+  ctx.fillStyle = '#15171c';
+  const patch = (cx,cy,r) => {
+    ctx.beginPath();
+    for(let k=0;k<5;k++){ const a=k/5*Math.PI*2 - Math.PI/2; const px=cx+Math.cos(a)*r, py=cy+Math.sin(a)*r; k?ctx.lineTo(px,py):ctx.moveTo(px,py); }
+    ctx.closePath(); ctx.fill();
+  };
+  patch(40,64,16); patch(120,40,15); patch(120,96,15); patch(200,64,16);
+  const tex = new THREE.CanvasTexture(c);
+  // 実寸: サッカーボールは直径約22cm = 半径0.11m
   ball = new THREE.Mesh(
-    new THREE.SphereGeometry(0.22, 24, 24),
-    new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.4 })
+    new THREE.SphereGeometry(0.11, 28, 28),
+    new THREE.MeshStandardMaterial({ map: tex, roughness: 0.45 })
   );
+  ball.castShadow = true;
   resetBall();
   scene.add(ball);
 }
-function resetBall(){ ball.position.set(0, 0.22, SPOT_Z); }
+function resetBall(){ ball.position.set(0, 0.11, SPOT_Z); }
 
-// 簡易キーパー（箱＋球＋腕）。差し替え前提の仮モデル
-function buildKeeper(){
-  keeper = new THREE.Group();
-  const body = new THREE.Mesh(new THREE.BoxGeometry(0.6, 1.1, 0.35),
-    new THREE.MeshStandardMaterial({ color: 0x222831 }));
-  body.position.y = 0.95; keeper.add(body);
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.22, 16, 16),
-    new THREE.MeshStandardMaterial({ color: 0xe0b98c }));
-  head.position.y = 1.7; keeper.add(head);
-  const armMat = new THREE.MeshStandardMaterial({ color: 0x39c5bb });
-  const armL = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.8, 0.18), armMat);
-  armL.position.set(-0.45, 1.1, 0); keeper.add(armL);
-  const armR = armL.clone(); armR.position.x = 0.45; keeper.add(armR);
-  keeper.position.set(0, 0, 0.3);
-  scene.add(keeper);
-}
-
-// 簡易キッカー（CPUがキックするとき表示）
-function buildKicker(){
-  kicker = new THREE.Group();
-  const body = new THREE.Mesh(new THREE.BoxGeometry(0.55, 1.1, 0.3),
-    new THREE.MeshStandardMaterial({ color: 0xb71c1c }));
-  body.position.y = 0.95; kicker.add(body);
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.22, 16, 16),
-    new THREE.MeshStandardMaterial({ color: 0xe0b98c }));
-  head.position.y = 1.7; kicker.add(head);
-  kicker.position.set(0.9, 0, SPOT_Z + 0.6);
-  kicker.visible = false;
-  scene.add(kicker);
-}
-
-function buildCrowd(){
-  // 遠景のスタンド（観客の点描）
-  const geo = new THREE.BufferGeometry();
-  const pts = [];
-  for(let i=0;i<1500;i++){
-    const side = Math.random() < 0.5 ? -1 : 1;
-    pts.push((Math.random()*30-15), 4 + Math.random()*8, -8 - Math.random()*6);
-    pts.push(side*(14 + Math.random()*5), 3 + Math.random()*7, Math.random()*40-5);
+// 人型キャラ（プリミティブ組み立て。後でMixamo等に差し替え可能）
+function buildHumanoid(col){
+  const g = new THREE.Group();
+  const M = (c)=> new THREE.MeshStandardMaterial({ color: c, roughness: 0.7 });
+  const part = (geo, mat, x, y, z) => { const m = new THREE.Mesh(geo, mat); m.position.set(x,y,z); m.castShadow = true; g.add(m); return m; };
+  // 脚
+  part(new THREE.BoxGeometry(0.18,0.75,0.2), M(col.sock), -0.13, 0.38, 0);
+  part(new THREE.BoxGeometry(0.18,0.75,0.2), M(col.sock),  0.13, 0.38, 0);
+  // 胴
+  part(new THREE.BoxGeometry(0.52,0.72,0.3), M(col.shirt), 0, 1.05, 0);
+  // 頭
+  part(new THREE.SphereGeometry(0.21,18,18), M(col.skin), 0, 1.58, 0);
+  // 腕（ポーズ変更のため参照を保持）
+  const armGeo = new THREE.BoxGeometry(0.14,0.66,0.14);
+  const armL = part(armGeo, M(col.shirt), -0.37, 1.08, 0);
+  const armR = part(armGeo, M(col.shirt),  0.37, 1.08, 0);
+  if(col.glove){
+    part(new THREE.BoxGeometry(0.2,0.2,0.2), M(col.glove), -0.37, 0.74, 0);
+    part(new THREE.BoxGeometry(0.2,0.2,0.2), M(col.glove),  0.37, 0.74, 0);
   }
-  geo.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
-  const colors = [];
-  for(let i=0;i<pts.length/3;i++){ colors.push(Math.random(), Math.random(), Math.random()); }
-  geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
-  const stand = new THREE.Points(geo, new THREE.PointsMaterial({ size: 0.35, vertexColors: true }));
-  scene.add(stand);
+  g.userData.armL = armL; g.userData.armR = armR;
+  return g;
 }
 
-// ---- カメラ位置（視点切り替え）----
+function buildStadium(){
+  // 観客スタンド（傾いた板）＋観客（点）を四方に配置
+  const standMat = new THREE.MeshStandardMaterial({ color: 0x10131c, roughness: 1 });
+  function stand(px, pz, w, d, ry){
+    const s = new THREE.Mesh(new THREE.BoxGeometry(w, 9, d), standMat);
+    s.position.set(px, 4.5, pz); s.rotation.y = ry; s.rotation.x = -0.32; scene.add(s);
+  }
+  stand(0, -12, 70, 14, 0);          // ゴール裏
+  stand(0, 36, 70, 14, 0);           // 反対側
+  stand(-34, 12, 60, 14, Math.PI/2); // 左
+  stand(34, 12, 60, 14, Math.PI/2);  // 右
+
+  // 観客（カラフルな点）
+  const pts = [], cols = [];
+  function crowd(cx, cz, w, d){
+    for(let i=0;i<900;i++){
+      pts.push(cx + (rand()-0.5)*w, 3 + rand()*8, cz + (rand()-0.5)*d);
+      const h = rand(); cols.push(0.4+rand()*0.6, 0.4+rand()*0.6, 0.4+rand()*0.6);
+    }
+  }
+  crowd(0,-12,66,8); crowd(0,36,66,8); crowd(-33,12,8,56); crowd(33,12,8,56);
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pts,3));
+  geo.setAttribute('color', new THREE.Float32BufferAttribute(cols,3));
+  scene.add(new THREE.Points(geo, new THREE.PointsMaterial({ size:0.5, vertexColors:true })));
+}
+
+function buildFloodlights(){
+  const poleMat = new THREE.MeshStandardMaterial({ color: 0x444a55 });
+  const panelMat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xffffee, emissiveIntensity: 1 });
+  [[-28,-14],[28,-14],[-28,38],[28,38]].forEach(([x,z])=>{
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.25,0.25,18,8), poleMat);
+    pole.position.set(x, 9, z); scene.add(pole);
+    const panel = new THREE.Mesh(new THREE.BoxGeometry(3,1.4,0.3), panelMat);
+    panel.position.set(x, 18, z); panel.lookAt(0, 2, 12); scene.add(panel);
+    const pl = new THREE.PointLight(0xfff6e0, 0.35, 80); pl.position.set(x, 17, z); scene.add(pl);
+  });
+}
+
 function setCameraKicker(){
-  // ボールの後方から、ゴールを見るアングル
-  camera.position.set(0, 1.7, SPOT_Z + 3.2);
+  camBase.set(0, 1.75, SPOT_Z + 3.2);
+  camera.position.copy(camBase);
   camera.lookAt(0, 1.3, 0);
 }
 function setCameraKeeper(){
-  // ゴール前で、飛んでくるボールを正面に受けるアングル
-  camera.position.set(0, 1.6, -0.5);
+  camBase.set(0, 1.6, -0.6);
+  camera.position.copy(camBase);
   camera.lookAt(0, 1.2, SPOT_Z);
 }
 
@@ -262,42 +384,52 @@ function onResize(){
   renderer.setSize(window.innerWidth, window.innerHeight);
 }
 
-let camBaseY = 1.7;
 function animate(){
   requestAnimationFrame(animate);
-  // 画面シェイク
-  if(shake > 0.001){
-    camera.position.x += (Math.random()-0.5) * shake;
-    camera.position.y += (Math.random()-0.5) * shake;
-    shake *= 0.9;
+  // キーパーの姿勢を目標へ滑らかに補間（ダイブ演出）
+  if(keeper){
+    keeper.position.x += (keeperTarget.x - keeper.position.x) * 0.35;
+    keeper.position.y += (keeperTarget.y - keeper.position.y) * 0.35;
+    keeper.rotation.z += (keeperTarget.rotZ - keeper.rotation.z) * 0.35;
+    const aL = keeper.userData.armL, aR = keeper.userData.armR;
+    if(aL){ aL.rotation.z += ( keeperTarget.arm - aL.rotation.z) * 0.3; }
+    if(aR){ aR.rotation.z += (-keeperTarget.arm - aR.rotation.z) * 0.3; }
+  }
+  // 画面シェイク（ベース位置からのオフセット）
+  if(shake > 0.002){
+    camera.position.set(
+      camBase.x + (rand()-0.5)*shake,
+      camBase.y + (rand()-0.5)*shake,
+      camBase.z
+    );
+    shake *= 0.88;
+  } else {
+    camera.position.copy(camBase);
   }
   renderer.render(scene, camera);
 }
 
 /* =========================================================================
-   サウンド（WebAudio。外部ファイル不要で生成）
+   サウンド（WebAudio。外部ファイル不要）
    ========================================================================= */
 let actx = null;
-function ensureAudio(){ if(!actx){ actx = new (window.AudioContext||window.webkitAudioContext)(); } }
+function ensureAudio(){ if(!actx){ try{ actx = new (window.AudioContext||window.webkitAudioContext)(); }catch(e){} } }
 function tone(freq, dur, type, vol){
   if(!actx) return;
   const o = actx.createOscillator(), g = actx.createGain();
-  o.type = type||'sine'; o.frequency.value = freq;
-  g.gain.value = vol||0.2;
-  o.connect(g); g.connect(actx.destination);
-  o.start();
+  o.type = type||'sine'; o.frequency.value = freq; g.gain.value = vol||0.2;
+  o.connect(g); g.connect(actx.destination); o.start();
   g.gain.exponentialRampToValueAtTime(0.0001, actx.currentTime + dur);
   o.stop(actx.currentTime + dur);
 }
-function sndWhistle(){ tone(2100, 0.18, 'square', 0.15); setTimeout(()=>tone(2300,0.12,'square',0.12),120); }
-function sndKick(){ tone(120, 0.12, 'triangle', 0.5); }
-function sndNet(){ tone(80, 0.25, 'sawtooth', 0.25); }
+function sndWhistle(){ tone(2100,0.18,'square',0.13); setTimeout(()=>tone(2300,0.12,'square',0.1),120); }
+function sndKick(){ tone(120,0.12,'triangle',0.5); }
+function sndNet(){ tone(80,0.25,'sawtooth',0.22); }
 function sndCheer(){
   if(!actx) return;
-  // ホワイトノイズで歓声を表現
-  const buf = actx.createBuffer(1, actx.sampleRate*1.2, actx.sampleRate);
+  const buf = actx.createBuffer(1, actx.sampleRate*1.3, actx.sampleRate);
   const d = buf.getChannelData(0);
-  for(let i=0;i<d.length;i++){ d[i] = (Math.random()*2-1) * Math.min(1, i/3000) * (1 - i/d.length); }
+  for(let i=0;i<d.length;i++){ d[i] = (rand()*2-1) * Math.min(1, i/3000) * (1 - i/d.length); }
   const src = actx.createBufferSource(); src.buffer = buf;
   const g = actx.createGain(); g.gain.value = 0.35;
   const f = actx.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 900;
@@ -305,37 +437,33 @@ function sndCheer(){
 }
 
 /* =========================================================================
-   ゲーム進行（ステートマシン）
+   ゲーム進行
    ========================================================================= */
-const MAX_ROUNDS = 5;          // 各プレイヤー5本
-let round = 0;                 // 0..(MAX_ROUNDS*2-1) を交互に
-let youScore = 0, cpuScore = 0;
-let history = [];              // 各キックの結果表示用
-let busy = false;              // 入力ロック
+const MAX_ROUNDS = 5;
+let round = 0, youScore = 0, cpuScore = 0, history = [];
+let lastPlayerKickZone = -1;   // 連続で同じコースを狙うと読まれやすくする
 
 const hud = document.getElementById('hud');
 const scoreEl = document.getElementById('score');
 const marksEl = document.getElementById('marks');
 const roleEl = document.getElementById('role');
+const diffTagEl = document.getElementById('diffTag');
 const msgEl = document.getElementById('message');
 const zoneWrap = document.getElementById('zonewrap');
 const zoneGrid = document.getElementById('zonegrid');
 const timerBar = document.getElementById('timerbar');
 const timerFill = document.getElementById('timerfill');
 
-// 9つのゾーンボタンを生成
 let zoneButtons = [];
 function buildZoneButtons(){
-  zoneGrid.innerHTML = '';
-  zoneButtons = [];
+  zoneGrid.innerHTML = ''; zoneButtons = [];
   for(let i=0;i<9;i++){
     const b = document.createElement('div');
-    b.className = 'zone';
-    b.dataset.i = i;
-    zoneGrid.appendChild(b);
-    zoneButtons.push(b);
+    b.className = 'zone'; b.dataset.i = i;
+    zoneGrid.appendChild(b); zoneButtons.push(b);
   }
 }
+function cleanupZones(){ buildZoneButtons(); }
 
 function showMessage(big, sub, ms){
   msgEl.innerHTML = `<span class="big">${big}</span>` + (sub?`<span class="sub">${sub}</span>`:'');
@@ -347,28 +475,39 @@ function hideMessage(){ msgEl.classList.add('hidden'); }
 function updateHud(){
   scoreEl.textContent = `YOU ${youScore} - ${cpuScore} CPU`;
   marksEl.innerHTML = history.map(h => h.goal ? '⚽' : '✖').join('');
+  diffTagEl.textContent = diffKey;
 }
 
-// 「あなたがキッカー」のターンか？（偶数ラウンド=あなたがキッカー）
 function youAreKicker(){ return round % 2 === 0; }
+
+// キーパー姿勢をセット（zone方向へダイブ）
+function poseKeeper(zone, ready){
+  if(ready){ keeperTarget = { x:0, y:0, z:0.3, rotZ:0, arm:0.2 }; return; }
+  const p = zonePos(zone);
+  keeperTarget = {
+    x: p.x * 0.72,
+    y: Math.max(0, p.y - 1.0),
+    z: 0.3,
+    rotZ: -Math.sign(p.x) * 0.9,
+    arm: 1.3,
+  };
+}
 
 function startGame(){
   ensureAudio();
-  round = 0; youScore = 0; cpuScore = 0; history = [];
+  diff = DIFFS[diffKey];
+  round = 0; youScore = 0; cpuScore = 0; history = []; lastPlayerKickZone = -1;
   document.getElementById('menu').classList.add('hidden');
   document.getElementById('result').classList.add('hidden');
   hud.classList.remove('hidden');
-  buildZoneButtons();
-  updateHud();
+  buildZoneButtons(); updateHud();
   nextRound();
 }
 
 function nextRound(){
   if(round >= MAX_ROUNDS * 2){ endGame(); return; }
-  busy = false;
   resetBall();
-  keeper.position.set(0, 0, 0.3);
-  keeper.rotation.z = 0;
+  poseKeeper(0, true);
   kicker.visible = false;
   const kickerTurn = youAreKicker();
   roleEl.textContent = kickerTurn ? 'KICKER' : 'KEEPER';
@@ -376,18 +515,13 @@ function nextRound(){
 
   const shotNo = Math.floor(round/2) + 1;
   if(kickerTurn){
-    setCameraKicker();
-    keeper.visible = true;
+    setCameraKicker(); keeper.visible = true;
     showMessage(`第${shotNo}本 / 攻撃`, 'コースをタップして狙え！', 1400);
-    sndWhistle();
-    setTimeout(kickerPhase, 1500);
+    sndWhistle(); setTimeout(kickerPhase, 1500);
   } else {
-    setCameraKeeper();
-    keeper.visible = true;
-    kicker.visible = true;
+    setCameraKeeper(); keeper.visible = true; kicker.visible = true;
     showMessage(`第${shotNo}本 / 守備`, 'ボールが来るコースを読め！', 1400);
-    sndWhistle();
-    setTimeout(keeperPhase, 1500);
+    sndWhistle(); setTimeout(keeperPhase, 1500);
   }
 }
 
@@ -397,59 +531,52 @@ function kickerPhase(){
   zoneWrap.style.display = 'block';
   timerBar.style.display = 'block';
   let done = false;
-  const t = 3.0; // 制限時間（秒）：緊張感の演出
+  const t = diff.kickTime;
   const startT = performance.now();
 
   function shoot(zone, timedOut){
-    if(done) return;
-    done = true;
-    clearInterval(timer);
-    cleanupZones();        // リスナーごとボタンを作り直す
+    if(done) return; done = true;
+    clearInterval(timer); cleanupZones();
     doKickerShot(zone, timedOut);
   }
+  zoneButtons.forEach(b=> b.addEventListener('click', ()=> shoot(parseInt(b.dataset.i,10), false)));
 
-  // ゾーンをタップ＝即シュート
-  zoneButtons.forEach(b=>{
-    b.addEventListener('click', ()=> shoot(parseInt(b.dataset.i,10), false));
-  });
-
-  // 制限時間。切れたら中央下へ弱いシュート（決まりにくい）
   const timer = setInterval(()=>{
     const left = Math.max(0, t - (performance.now()-startT)/1000);
     timerFill.style.width = (left/t*100) + '%';
-    if(left <= 0){ shoot(7, true); }
+    if(left <= 0){ shoot(7, true); }   // 時間切れ＝中央下へ弱いシュート
   }, 50);
 }
 
+// CPUキーパーの読み（賢く）
+function cpuKeeperGuess(playerZone){
+  let read = diff.read;
+  if(playerZone === lastPlayerKickZone) read += 0.25; // 同じコースの連続は読まれる
+  if(rand() < read) return playerZone;
+  // はずれ時：中央寄りを多めにカバー
+  const weights = [1,1.4,1, 1.2,1.8,1.2, 1.1,1.5,1.1];
+  let sum = weights.reduce((a,b)=>a+b,0), r = rand()*sum;
+  for(let i=0;i<9;i++){ r -= weights[i]; if(r<=0) return i; }
+  return 4;
+}
+
 function doKickerShot(zone, timedOut){
-  busy = true;
-  sndKick(); shake = 0.25;
-  // CPUキーパーの読み：30%で正解ゾーン、70%でランダム
-  let guess;
-  if(Math.random() < 0.30){ guess = zone; }
-  else { guess = Math.floor(Math.random()*9); }
-  diveKeeper(guess);
+  sndKick(); shake = 0.3;
+  const guess = cpuKeeperGuess(zone);
+  poseKeeper(guess);
+  lastPlayerKickZone = zone;
 
   const target = zonePos(zone);
-  // 時間切れ/隅すぎは枠外リスク
-  let offTarget = timedOut && Math.random()<0.5;
-  const isCorner = (zone===0||zone===2||zone===6||zone===8);
-  if(isCorner && Math.random()<0.12) offTarget = true;
+  let offTarget = timedOut && rand() < 0.5;
+  if(CORNERS.indexOf(zone) >= 0 && rand() < 0.10) offTarget = true; // 隅は枠外リスク
+  const tx = offTarget ? target.x * 1.35 : target.x;
+  const ty = offTarget ? target.y + 0.7 : target.y;
 
-  const tx = offTarget ? target.x * 1.4 : target.x;
-  const ty = offTarget ? target.y + 0.8 : target.y;
-
-  flyBall({x:tx, y:ty, z:0}, 0.55, ()=>{
-    const saved = (guess === zone) && !offTarget;
-    if(offTarget){
-      resolveShot(false, '枠外！', 'ねらい過ぎた…');
-    } else if(saved){
-      resolveShot(false, 'SAVED!', 'キーパーに読まれた！');
-      sndNet();
-    } else {
-      resolveShot(true, 'GOAL!!', 'ナイスシュート！');
-      sndNet(); sndCheer();
-    }
+  flyBall({x:tx, y:ty, z:0}, diff.flyKick, ()=>{
+    if(offTarget){ resolveShot(false, '枠外！', 'ねらい過ぎた…'); return; }
+    const saved = (guess === zone) || (isAdjacent(guess, zone) && rand() < diff.cpuAdj);
+    if(saved){ sndNet(); resolveShot(false, 'SAVED!', 'キーパーに止められた！'); }
+    else { sndNet(); sndCheer(); resolveShot(true, 'GOAL!!', 'ナイスシュート！'); }
   });
 }
 
@@ -457,98 +584,68 @@ function doKickerShot(zone, timedOut){
 function keeperPhase(){
   hideMessage();
   zoneWrap.style.display = 'block';
-  // CPUが狙うゾーンを決定
-  const targetZone = Math.floor(Math.random()*9);
-  let playerDive = -1;
-  let resolved = false;
 
-  // 助走方向のヒント（少しだけテレグラフ）
-  kicker.position.x = (zonePos(targetZone).x>0? 1.1 : (zonePos(targetZone).x<0? 0.7 : 0.9));
+  // CPUの狙い：難易度に応じてコーナーを多用
+  let targetZone;
+  if(rand() < diff.cornerBias){ targetZone = CORNERS[Math.floor(rand()*CORNERS.length)]; }
+  else { targetZone = Math.floor(rand()*9); }
 
+  // 助走方向のヒント。フェイント時は逆を向く
+  const realSide = Math.sign(zonePos(targetZone).x);
+  const feint = rand() < diff.feint;
+  const shownSide = feint ? -realSide : realSide;
+  kicker.position.x = 0.9 + shownSide*0.4;
+
+  let playerDive = -1, resolved = false;
   function onDive(e){
     if(resolved) return;
     playerDive = parseInt(e.currentTarget.dataset.i, 10);
     zoneButtons.forEach(b=>b.classList.remove('hot'));
     e.currentTarget.classList.add('hot');
-    diveKeeper(playerDive);
+    poseKeeper(playerDive);
     sndKick();
   }
   zoneButtons.forEach(b=> b.addEventListener('click', onDive));
 
-  // 少し溜めてからキック（CPUの助走）
-  const delay = 700 + Math.random()*500;
+  const delay = 650 + rand()*450;
   setTimeout(()=>{
-    sndKick(); shake = 0.2; kicker.visible = false;
+    sndKick(); shake = 0.25; kicker.visible = false;
     const target = zonePos(targetZone);
-    flyBall({x:target.x, y:target.y, z:0.3}, 0.6, ()=>{
-      resolved = true;
-      cleanupZones();
-      zoneButtons.forEach(b=> b.removeEventListener('click', onDive));
-      const saved = (playerDive === targetZone);
-      if(saved){
-        resolveShot(false, 'SAVE!!', 'ビッグセーブ！', true);
-        slowmoFlash(); sndCheer();
-      } else {
-        resolveShot(true, 'GOAL...', playerDive<0?'反応できず…':'逆を突かれた…', true);
-        sndNet();
-      }
+    flyBall({x:target.x, y:target.y, z:0.3}, diff.flyKeeper, ()=>{
+      resolved = true; cleanupZones();
+      const saved = (playerDive === targetZone) ||
+                    (playerDive >= 0 && isAdjacent(playerDive, targetZone) && rand() < diff.playerAdj);
+      if(saved){ sndCheer(); shake = 0.4; resolveShot(false, 'SAVE!!', 'ビッグセーブ！', true); }
+      else { sndNet(); resolveShot(true, 'GOAL...', playerDive<0?'反応できず…':'コースを読まれた…', true); }
     });
   }, delay);
 }
 
-// キーパーがダイブする見た目
-function diveKeeper(zone){
-  const p = zonePos(zone);
-  keeper.position.x = p.x * 0.7;
-  keeper.position.y = Math.max(0, p.y - 1.0);
-  keeper.rotation.z = -Math.sign(p.x) * 0.7;
-}
-
-// ボールを目標へ飛ばす（duration秒）
+// ボールを目標へ飛ばす
 function flyBall(target, duration, done){
   const start = { x: ball.position.x, y: ball.position.y, z: ball.position.z };
   const t0 = performance.now();
   function step(){
     const k = Math.min(1, (performance.now()-t0)/(duration*1000));
-    const e = 1 - Math.pow(1-k, 2); // ease-out
+    const e = 1 - Math.pow(1-k, 2);
     ball.position.x = start.x + (target.x-start.x)*e;
-    ball.position.y = start.y + (target.y-start.y)*e + Math.sin(e*Math.PI)*0.3; // 弧
+    ball.position.y = start.y + (target.y-start.y)*e + Math.sin(e*Math.PI)*0.3;
     ball.position.z = start.z + (target.z-start.z)*e;
-    ball.rotation.x += 0.4; ball.rotation.y += 0.3;
-    if(k < 1){ requestAnimationFrame(step); }
-    else if(done){ done(); }
+    ball.rotation.x += 0.5; ball.rotation.y += 0.35;
+    if(k < 1){ requestAnimationFrame(step); } else if(done){ done(); }
   }
   step();
 }
 
-function slowmoFlash(){
-  shake = 0.35;
-}
-
-// 1本の結果を確定して次へ
 function resolveShot(isGoal, big, sub){
-  // isGoal: ボールがネットを揺らしたか
   const youKicked = youAreKicker();
-  // あなたがキッカー: ゴール=あなた得点 / あなたがキーパー: ゴール=CPU得点
-  if(isGoal){
-    if(youKicked) youScore++; else cpuScore++;
-  }
+  if(isGoal){ if(youKicked) youScore++; else cpuScore++; }
   history.push({ goal: isGoal });
   updateHud();
   zoneWrap.style.display = 'none';
   timerBar.style.display = 'none';
   showMessage(big, sub, 0);
-  setTimeout(()=>{
-    hideMessage();
-    round++;
-    nextRound();
-  }, 1900);
-}
-
-function cleanupZones(){
-  zoneButtons.forEach(b=> b.classList.remove('hot'));
-  // クローンで全リスナー除去（簡易）
-  buildZoneButtons();
+  setTimeout(()=>{ hideMessage(); round++; nextRound(); }, 1900);
 }
 
 function endGame(){
@@ -557,16 +654,27 @@ function endGame(){
   const win = youScore > cpuScore, draw = youScore === cpuScore;
   document.getElementById('resultTitle').textContent = win ? 'YOU WIN! 🏆' : draw ? 'DRAW' : 'YOU LOSE...';
   document.getElementById('resultText').innerHTML =
-    `最終スコア<br><b style="font-size:28px">YOU ${youScore} - ${cpuScore} CPU</b>`;
+    `難易度 ${diffKey}<br>最終スコア<br><b style="font-size:28px">YOU ${youScore} - ${cpuScore} CPU</b>`;
   document.getElementById('result').classList.remove('hidden');
   if(win){ sndCheer(); }
 }
 
-// ---- 起動 ----
+// ---- 起動・UI ----
 initScene();
 setCameraKicker();
+
+document.querySelectorAll('.diffbtn').forEach(b=>{
+  b.addEventListener('click', ()=>{
+    diffKey = b.dataset.d;
+    document.querySelectorAll('.diffbtn').forEach(x=>x.classList.remove('sel'));
+    b.classList.add('sel');
+  });
+});
 document.getElementById('startBtn').addEventListener('click', startGame);
-document.getElementById('againBtn').addEventListener('click', startGame);
+document.getElementById('againBtn').addEventListener('click', ()=>{
+  document.getElementById('result').classList.add('hidden');
+  document.getElementById('menu').classList.remove('hidden');
+});
 </script>
 </body>
 </html>
