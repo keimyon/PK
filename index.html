@@ -63,6 +63,21 @@
   .btn:active { transform: scale(.96); }
   .hidden { display: none !important; }
   #howto { margin-top: 20px; font-size: 13px; opacity: .65; line-height: 1.9; }
+
+  /* ゾーン入力が無効な間（反応待ち）は薄く */
+  #zonewrap.disabled { opacity: .35; }
+
+  /* キッカーのミート・タイミングゲージ */
+  #meter { position: fixed; left: 50%; transform: translateX(-50%); bottom: 22%;
+           width: min(78vw, 400px); height: 26px; border-radius: 999px; background: rgba(0,0,0,.45);
+           border: 2px solid rgba(255,255,255,.25); display: none; overflow: hidden; }
+  #meterBand { position: absolute; top: 0; bottom: 0; left: 41%; width: 18%;
+               background: linear-gradient(90deg, rgba(76,222,128,.25), rgba(76,222,128,.6), rgba(76,222,128,.25)); }
+  #meterMark { position: absolute; top: -3px; bottom: -3px; width: 6px; left: 0; border-radius: 3px;
+               background: #fff; box-shadow: 0 0 10px #fff; }
+  #meterHit { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+              font-size: clamp(40px,14vw,72px); font-weight: 900; color: rgba(255,255,255,.10);
+              z-index: 5; cursor: pointer; user-select: none; letter-spacing: 4px; }
 </style>
 </head>
 <body>
@@ -85,6 +100,10 @@
 <div id="zonewrap"><div id="zonegrid"></div></div>
 <div id="timerbar"><div id="timerfill"></div></div>
 
+<!-- キッカーのミート・タイミングゲージ -->
+<div id="meter"><div id="meterBand"></div><div id="meterMark"></div></div>
+<div id="meterHit" class="hidden">TAP!</div>
+
 <!-- Start menu -->
 <div id="menu" class="panel">
   <h1>PK BATTLE</h1>
@@ -97,8 +116,8 @@
   </div>
   <button class="btn" id="startBtn">▶ ゲーム開始</button>
   <div id="howto">
-    ● キッカー: 狙うコースをタップ（時間内に！）<br>
-    ● キーパー: ボールが来るコースを読んでタップ<br>
+    ● キッカー: コースを選び、ゲージ中央でジャストにタップしてミート<br>
+    ● キーパー: シュートを見てから、飛ぶコースに反応してタップ<br>
     全5本・攻守交代。多く決めた方の勝ち
   </div>
 </div>
@@ -133,10 +152,12 @@ function isAdjacent(a, b){
 const CORNERS = [0, 2, 6, 8];
 
 // ---- 難易度設定 ----
+//  flyKeeper = 守備時の反応猶予（ボール到達までの秒数。短いほど難しい）
+//  meterSpeed/bandHalf = 攻撃時ミートゲージの速さ/的の広さ(%)
 const DIFFS = {
-  EASY:   { read:0.30, cpuAdj:0.12, flyKeeper:0.70, flyKick:0.60, cornerBias:0.30, feint:0.00, playerAdj:0.45, kickTime:3.5 },
-  NORMAL: { read:0.46, cpuAdj:0.30, flyKeeper:0.58, flyKick:0.55, cornerBias:0.55, feint:0.18, playerAdj:0.34, kickTime:3.0 },
-  HARD:   { read:0.62, cpuAdj:0.46, flyKeeper:0.46, flyKick:0.50, cornerBias:0.78, feint:0.32, playerAdj:0.22, kickTime:2.4 },
+  EASY:   { read:0.30, cpuAdj:0.12, flyKeeper:0.85, flyKick:0.60, cornerBias:0.30, feint:0.00, playerAdj:0.45, aimTime:4.0, meterSpeed:0.85, bandHalf:13 },
+  NORMAL: { read:0.46, cpuAdj:0.30, flyKeeper:0.62, flyKick:0.55, cornerBias:0.55, feint:0.18, playerAdj:0.34, aimTime:3.5, meterSpeed:1.25, bandHalf:9 },
+  HARD:   { read:0.62, cpuAdj:0.46, flyKeeper:0.46, flyKick:0.50, cornerBias:0.78, feint:0.32, playerAdj:0.22, aimTime:3.0, meterSpeed:1.75, bandHalf:6 },
 };
 let diffKey = 'NORMAL';
 let diff = DIFFS[diffKey];
@@ -497,6 +518,10 @@ const zoneWrap = document.getElementById('zonewrap');
 const zoneGrid = document.getElementById('zonegrid');
 const timerBar = document.getElementById('timerbar');
 const timerFill = document.getElementById('timerfill');
+const meterEl = document.getElementById('meter');
+const meterBand = document.getElementById('meterBand');
+const meterMark = document.getElementById('meterMark');
+const meterHit = document.getElementById('meterHit');
 
 let zoneButtons = [];
 function buildZoneButtons(){
@@ -576,27 +601,73 @@ function nextRound(){
   }
 }
 
-/* ---- キッカーフェーズ：あなたが狙う ---- */
+/* ---- キッカーフェーズ：①コース選択 → ②ミートのタイミング反応 ---- */
 function kickerPhase(){
   hideMessage();
+  // ① 狙うコースを選択
   zoneWrap.style.display = 'block';
+  zoneWrap.classList.remove('disabled');
   timerBar.style.display = 'block';
-  let done = false;
-  const t = diff.kickTime;
+  let chosen = false;
+  const t = diff.aimTime;
   const startT = performance.now();
 
-  function shoot(zone, timedOut){
-    if(done) return; done = true;
-    clearInterval(timer); cleanupZones();
-    doKickerShot(zone, timedOut);
+  function choose(zone){
+    if(chosen) return; chosen = true;
+    clearInterval(timer);
+    cleanupZones(); zoneWrap.style.display = 'none'; timerBar.style.display = 'none';
+    startTimingMeter(zone);
   }
-  zoneButtons.forEach(b=> b.addEventListener('click', ()=> shoot(parseInt(b.dataset.i,10), false)));
+  zoneButtons.forEach(b=> b.addEventListener('click', ()=> choose(parseInt(b.dataset.i,10))));
 
   const timer = setInterval(()=>{
     const left = Math.max(0, t - (performance.now()-startT)/1000);
     timerFill.style.width = (left/t*100) + '%';
-    if(left <= 0){ shoot(7, true); }   // 時間切れ＝中央下へ弱いシュート
+    if(left <= 0){ choose(4); }   // 未選択なら中央へ
   }, 50);
+}
+
+// ② ミート・タイミングゲージ。中央のバンドでタップできれば good/perfect
+function startTimingMeter(zone){
+  showMessage('ジャストでミート！', 'バーが中央に来たらタップ', 0);
+  meterEl.style.display = 'block';
+  meterBand.style.left = (50 - diff.bandHalf) + '%';
+  meterBand.style.width = (diff.bandHalf * 2) + '%';
+  meterHit.classList.remove('hidden');
+
+  let done = false;
+  const t0 = performance.now();
+  let raf;
+  function frame(){
+    const t = (performance.now() - t0) / 1000;
+    // 0..100 を往復（三角波）
+    const phase = (t * diff.meterSpeed) % 1;
+    const pos = (phase < 0.5 ? phase*2 : (1-phase)*2) * 100;
+    meterMark.style.left = 'calc(' + pos + '% - 3px)';
+    meterMark.dataset.pos = pos;
+    if(!done){ raf = requestAnimationFrame(frame); }
+  }
+  frame();
+
+  function hit(){
+    if(done) return; done = true;
+    cancelAnimationFrame(raf);
+    meterHit.classList.add('hidden');
+    meterEl.style.display = 'none';
+    hideMessage();
+    const pos = parseFloat(meterMark.dataset.pos || '0');
+    const d = Math.abs(pos - 50);
+    let quality;
+    if(d <= diff.bandHalf) quality = 'PERFECT';
+    else if(d <= diff.bandHalf * 2.4) quality = 'GOOD';
+    else quality = 'MISS';
+    meterHit.removeEventListener('click', hit);
+    clearTimeout(auto);
+    doKickerShot(zone, quality);
+  }
+  meterHit.addEventListener('click', hit);
+  // 無反応が続いたら最悪タイミングで自動発射
+  const auto = setTimeout(()=>{ meterMark.dataset.pos = '0'; hit(); }, 2600);
 }
 
 // CPUキーパーの読み（賢く）
@@ -611,25 +682,32 @@ function cpuKeeperGuess(playerZone){
   return 4;
 }
 
-function doKickerShot(zone, timedOut){
+// quality: 'PERFECT' | 'GOOD' | 'MISS'（ミートの精度）
+function doKickerShot(zone, quality){
   const guess = cpuKeeperGuess(zone);
   lastPlayerKickZone = zone;
 
   const target = zonePos(zone);
-  let offTarget = timedOut && rand() < 0.5;
-  if(CORNERS.indexOf(zone) >= 0 && rand() < 0.10) offTarget = true; // 隅は枠外リスク
-  const tx = offTarget ? target.x * 1.35 : target.x;
-  const ty = offTarget ? target.y + 0.7 : target.y;
+  let offTarget = false, weak = false;
+  if(quality === 'MISS'){ if(rand() < 0.5) offTarget = true; else weak = true; }
+  if(quality !== 'PERFECT' && CORNERS.indexOf(zone) >= 0 && rand() < 0.10) offTarget = true;
+
+  let tx = target.x, ty = target.y;
+  if(offTarget){ tx = target.x * 1.4; ty = target.y + 0.7; }   // 枠外
+  else if(weak){ tx = target.x * 0.4; ty = 0.55; }             // 中央寄りの弱い球
 
   // 助走 → ボールの横でキック → ボール発射
   runUp(kicker, {x:-1.8, y:0, z:13.9}, {x:-0.5, y:0, z:11.4}, 0.75, ()=>{
     sndKick(); shake = 0.3;
     poseKeeper(guess);   // キーパーは蹴られた瞬間に反応してダイブ
     flyBall({x:tx, y:ty, z:0}, diff.flyKick, ()=>{
-      if(offTarget){ resolveShot(false, '枠外！', 'ねらい過ぎた…'); return; }
-      const saved = (guess === zone) || (isAdjacent(guess, zone) && rand() < diff.cpuAdj);
-      if(saved){ sndNet(); resolveShot(false, 'SAVED!', 'キーパーに止められた！'); }
-      else { sndNet(); sndCheer(); resolveShot(true, 'GOAL!!', 'ナイスシュート！'); }
+      if(offTarget){ resolveShot(false, '枠外！', 'ミートが大きくズレた…'); return; }
+      let saved;
+      if(weak){ saved = true; }                                   // 弱い球は止められる
+      else if(quality === 'PERFECT'){ saved = (guess === zone); } // 完璧は隣カバー無効
+      else { saved = (guess === zone) || (isAdjacent(guess, zone) && rand() < diff.cpuAdj); }
+      if(saved){ sndNet(); resolveShot(false, 'SAVED!', weak?'ミートが弱かった…':'キーパーに止められた！'); }
+      else { sndNet(); sndCheer(); resolveShot(true, 'GOAL!!', quality==='PERFECT'?'完璧なミート！':'ナイスシュート！'); }
     });
   });
 }
@@ -649,9 +727,11 @@ function keeperPhase(){
   const feint = rand() < diff.feint;
   const shownSide = feint ? -realSide : (realSide || 1);
 
-  let playerDive = -1, resolved = false;
+  // 反応ゲー: シュートが打たれるまでコース入力は無効
+  let playerDive = -1, resolved = false, canReact = false;
+  zoneWrap.classList.add('disabled');
   function onDive(e){
-    if(resolved) return;
+    if(resolved || !canReact) return;   // 蹴られる前のタップは無効
     playerDive = parseInt(e.currentTarget.dataset.i, 10);
     zoneButtons.forEach(b=>b.classList.remove('hot'));
     e.currentTarget.classList.add('hot');
@@ -660,16 +740,19 @@ function keeperPhase(){
   }
   zoneButtons.forEach(b=> b.addEventListener('click', onDive));
 
-  // 相手キッカーが助走 → こちら（キーパー）に向けてシュート
+  // 相手キッカーが助走 → 蹴った瞬間に反応解禁 → ボール到達までに反応してタップ
   runUp(kicker, {x:0.9 + shownSide*0.9, y:0, z:12.6}, {x:0.45, y:0, z:11.4}, 0.85, ()=>{
     sndKick(); shake = 0.25;
+    canReact = true;
+    zoneWrap.classList.remove('disabled');
+    showMessage('反応！', '', 500);
     const target = zonePos(targetZone);
     flyBall({x:target.x, y:target.y, z:0.3}, diff.flyKeeper, ()=>{
       resolved = true; cleanupZones();
       const saved = (playerDive === targetZone) ||
                     (playerDive >= 0 && isAdjacent(playerDive, targetZone) && rand() < diff.playerAdj);
-      if(saved){ sndCheer(); shake = 0.4; resolveShot(false, 'SAVE!!', 'ビッグセーブ！', true); }
-      else { sndNet(); resolveShot(true, 'GOAL...', playerDive<0?'反応できず…':'コースを読まれた…', true); }
+      if(saved){ sndCheer(); shake = 0.4; resolveShot(false, 'SAVE!!', 'ナイス反応！', true); }
+      else { sndNet(); resolveShot(true, 'GOAL...', playerDive<0?'反応が間に合わず…':'コースを外した…', true); }
     });
   });
 }
